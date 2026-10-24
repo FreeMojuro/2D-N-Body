@@ -8,6 +8,8 @@ constexpr int window_height{900};
 
 constexpr double G = 1000;
 constexpr double epsilon = 1;
+constexpr float gridSpacing = 50.0f;
+constexpr float segmentLength = 10.0f;
 double dt;
 const int max_trail_size{200};
 bool is_paused{false};
@@ -157,6 +159,19 @@ void GoSlower(){
 
 }
 
+Vector2 WarpPoint(Vector2 p, const std::deque<Body>& bodies){
+    Vector2 displacement{0,0};
+    for(const Body& body: bodies){
+        float dx = p.x - body.pos.x;
+        float dy = p.y - body.pos.y;
+        float r2 = dx * dx + dy * dy + 400.0f;
+        float strength = 0.8 * static_cast<float>(body.mass) / r2;
+
+        displacement.x += dx * strength;
+        displacement.y += dy * strength;
+    }
+    return p + displacement;
+}
 
 int main(){
     InitWindow(window_width, window_height, "N-Body Simulation - Verlet Integration");
@@ -170,13 +185,13 @@ int main(){
 
     std::deque<Body> bodies{};
     bodies.push_back(Body{Vector2{600,450}, Vector2{0,0}, 10000, 100, Vector2{0,0}, YELLOW});
-    bodies.push_back(Body{Vector2{600,800}, Vector2{180,0}, 25, 25, Vector2{0,0}, BLUE});
+    bodies.push_back(Body{Vector2{600,800}, Vector2{180,0}, 100, 25, Vector2{0,0}, BLUE});
 
     while(!WindowShouldClose()){
 
         float wheel = GetMouseWheelMove();
         if (wheel != 0) {
-            // Fare konumunu al
+            
             Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
 
             camera.offset = GetMousePosition();
@@ -232,6 +247,29 @@ int main(){
         ClearBackground(BLACK);
 
         BeginMode2D(camera);
+
+        Vector2 topLeft = GetScreenToWorld2D({0, 0}, camera);
+        Vector2 bottomRight = GetScreenToWorld2D(
+            {(float)GetScreenWidth(), (float)GetScreenHeight()}, camera);
+
+        float startX = std::floor(topLeft.x / gridSpacing) * gridSpacing;
+        float startY = std::floor(topLeft.y / gridSpacing) * gridSpacing;
+
+        
+        for (float x = startX; x <= bottomRight.x; x += gridSpacing) {
+          for (float y = topLeft.y; y < bottomRight.y; y += segmentLength) {
+            DrawLineEx(WarpPoint({x, y}, bodies),
+                       WarpPoint({x, y + segmentLength}, bodies), 1, DARKGRAY);
+          }
+        }
+
+        
+        for (float y = startY; y <= bottomRight.y; y += gridSpacing) {
+          for (float x = topLeft.x; x < bottomRight.x; x += segmentLength) {
+            DrawLineEx(WarpPoint({x, y}, bodies),
+                       WarpPoint({x + segmentLength, y}, bodies), 1, DARKGRAY);
+          }
+        }
 
         for(const auto& body: bodies){
             body.Draw();
