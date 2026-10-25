@@ -2,6 +2,9 @@
 #include <deque>
 #include <cmath>
 #include <vector>
+#include "presets.cpp"
+
+
 
 constexpr int window_width{1200};
 constexpr int window_height{900};
@@ -13,7 +16,9 @@ constexpr float segmentLength = 10.0f;
 double dt;
 const int max_trail_size{200};
 bool is_paused{false};
+bool black_hole_mode{false};
 float general_speed_multiplier{1};
+int current_preset = 1;
 
 
 Vector2 operator+(const Vector2& v1, const Vector2& v2){
@@ -91,6 +96,11 @@ class Body{
         trail.push_back(pos);
 
     }
+
+    bool isBlackHole(){
+    if(mass  >= 20000)return true;
+    else return false;
+}
 };
 
 Vector2 CalculateForce(const Body& b1, const Body& b2){
@@ -115,8 +125,11 @@ Vector2 Calculate_Accel(const Body& b1, const Body& b2){
 }
 
 void AddBody(std::deque<Body>& bodies,Camera2D camera){
-    Body& sun = bodies[0];
+
     Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+    if(!black_hole_mode){
+    Body& sun = bodies[0];
+    
 
     double rx = mouseWorldPos.x - sun.pos.x;
     double ry = mouseWorldPos.y - sun.pos.y;
@@ -136,12 +149,18 @@ void AddBody(std::deque<Body>& bodies,Camera2D camera){
 
 
     Body b{mouseWorldPos,initial_velocity,25,25,Vector2{0,0},randColor};
-    bodies.push_back(b);
+    bodies.push_back(b);}
 
+
+    else{
+        Body b{mouseWorldPos,Vector2{0,0},25000,150,Vector2{0,0},BLACK};
+        bodies.push_back(b);
+    }
 
 }
 
 void DeleteBody(std::deque<Body>& bodies){
+    if(bodies.size() > 0)
     bodies.pop_back();
 
 
@@ -184,8 +203,8 @@ int main(){
     camera.zoom = 1.0f; 
 
     std::deque<Body> bodies{};
-    bodies.push_back(Body{Vector2{600,450}, Vector2{0,0}, 10000, 100, Vector2{0,0}, YELLOW});
-    bodies.push_back(Body{Vector2{600,800}, Vector2{180,0}, 100, 25, Vector2{0,0}, BLUE});
+    Preset1(bodies);
+   
 
     while(!WindowShouldClose()){
 
@@ -209,13 +228,25 @@ int main(){
         if(IsKeyPressed(KEY_SPACE))is_paused=!is_paused;
         if(IsKeyDown(KEY_E))GoFaster();
         if(IsKeyDown(KEY_Q))GoSlower();
+        if(IsKeyPressed(KEY_B))black_hole_mode = !black_hole_mode;
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))AddBody(bodies,camera);
         if(IsKeyPressed(KEY_DELETE))DeleteBody(bodies);
+        if(IsKeyDown(KEY_DELETE) && IsKeyDown(KEY_LEFT_SHIFT))DeleteBody(bodies);
         if (IsKeyPressed(KEY_R)) {
             general_speed_multiplier = 1;
-            bodies.clear();
-            bodies.push_back(Body{Vector2{600,450}, Vector2{0,0}, 10000, 100, Vector2{0,0}, YELLOW});
+            switch(current_preset){
+                case 1: Preset1(bodies);break;
+                case 2: Preset2(bodies);break;
+                case 3: Preset3(bodies);break;
+                case 4: Preset4(bodies);break;
+            }
+            
         }
+        if (IsKeyPressed(KEY_ONE) && current_preset != 1){Preset1(bodies); current_preset = 1;}
+        if(IsKeyPressed(KEY_TWO) && current_preset != 2){Preset2(bodies); current_preset = 2;}
+        if(IsKeyPressed(KEY_THREE) && current_preset != 3){Preset3(bodies); current_preset = 3;}
+        if(IsKeyPressed(KEY_FOUR) && current_preset != 4){Preset4(bodies); current_preset = 4;}
+
 
         
         dt = GetFrameTime() * general_speed_multiplier;
@@ -280,12 +311,21 @@ int main(){
         DrawText(TextFormat("FPS:%d", GetFPS()), 10, 10, 20, RAYWHITE);
         DrawText(TextFormat("Num Bodies:%d",bodies.size()),10,40,20,RAYWHITE);
         DrawText(TextFormat("Speed:x%1f",general_speed_multiplier), 10, 70, 20, RAYWHITE);
+        if(black_hole_mode)DrawText("Black Hole Mode", 10, 100, 30, RED);
         if(is_paused){
             DrawText("Paused", window_width/2 -170, window_height/2 - 50, 100, RAYWHITE);
             DrawText("DEL: Delete Body", 10, window_height - 30, 20, RAYWHITE);
             DrawText("LEFT CLICK: Add body", 10, window_height - 60, 20, RAYWHITE);
             DrawText("R: Reset", 10, window_height - 90, 20, RAYWHITE);
             DrawText("Q/E: Go Slower/Faster", 10, window_height - 120, 20, RAYWHITE);
+
+            switch(current_preset){
+                case 1: DrawText("Preset: Sun-Earth",10,window_height-180,20,RAYWHITE);break;
+                case 2: DrawText("Preset: Star Cluster",10,window_height-180,20,RAYWHITE);break;
+                case 3: DrawText("Preset: Solar System",10,window_height-180,20,RAYWHITE);break;
+                case 4: DrawText("Preset: Single Black Hole",10,window_height-180,20,RAYWHITE);break;
+            }
+            
         }
 
         EndDrawing();
