@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <raylib.h>
 #include <deque>
 #include <cmath>
@@ -57,6 +58,7 @@ class Body{
     Vector2 a_t;
     Color color;
     std::deque<Vector2> trail;
+    bool active{true};
 
     Body(Vector2 p, Vector2 v, double m, double r, Vector2 ac, Color col): pos{p}, velocity{v}, mass{m}, radius{r}, a_t{ac}, color{col}{}
 
@@ -81,6 +83,7 @@ class Body{
     }
 
     void DrawTrail()const{
+        if (trail.size() < 2) return;
         for(int i{0}; i < trail.size() -1 ; ++i){
             unsigned char alpha = static_cast<unsigned char>(255.0f * (static_cast<float>(i) / trail.size()));
             Color fadedcolor = color;
@@ -128,6 +131,7 @@ void AddBody(std::deque<Body>& bodies,Camera2D camera){
 
     Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
     if(!black_hole_mode){
+    if(bodies.empty()) return;
     Body& sun = bodies[0];
     
 
@@ -191,6 +195,86 @@ Vector2 WarpPoint(Vector2 p, const std::deque<Body>& bodies){
     }
     return p + displacement;
 }
+
+
+void CheckCollision(std::deque<Body>& bodies){
+    std::vector<Body> temp_storage{};
+    for(int i{0}; i < bodies.size(); ++i){
+        for(int j{i+1}; j < bodies.size(); ++j){
+
+            Body& body1 = bodies[i];
+            Body& body2 = bodies[j];
+
+            double dx = body1.pos.x - body2.pos.x;
+            double dy = body1.pos.y - body2.pos.y;
+            double mindist = body1.radius + body2.radius;
+            double dist = std::sqrt(dx * dx + dy * dy);
+
+            if(dist < mindist && dist > 0.0f){
+                if(body1.isBlackHole() && body2.isBlackHole()){
+                    Vector2 position{static_cast<float>(body1.pos.x + body2.radius), static_cast<float>(body1.pos.y + body2.radius)};
+                    Body n_body{position,Vector2{0,0},body1.mass+body2.mass, (body1.radius+body2.radius)/1.5,Vector2{0,0},BLACK};
+                    body1.active = false;
+                    body2.active = false;
+                    temp_storage.push_back(n_body);
+                    break;
+
+                } // Two Black holes
+
+                else if(body1.isBlackHole() || body2.isBlackHole()){
+                    Body& blackhole = (body1.isBlackHole()) ? body1 : body2;
+                    Body& other = (body1.isBlackHole()) ? body2 : body1;
+
+                    blackhole.mass += other.mass;
+                    blackhole.radius += other.radius/10;
+
+                    other.active = false;
+
+                    break;
+
+                } // One Black hole case
+
+                else{
+                    
+                    const double nx = dx / dist;
+                    const double ny = dy / dist;
+                    
+                    const double inv_mass1 = 1.0 / body1.mass;
+                    const double inv_mass2 = 1.0 / body2.mass;
+                    const double inv_mass_sum = inv_mass1 + inv_mass2;
+                    const double overlap = mindist - dist;
+
+                    body1.pos.x += static_cast<float>(nx * overlap * inv_mass1 / inv_mass_sum);
+                    body1.pos.y += static_cast<float>(ny * overlap * inv_mass1 / inv_mass_sum);
+                    body2.pos.x -= static_cast<float>(nx * overlap * inv_mass2 / inv_mass_sum);
+                    body2.pos.y -= static_cast<float>(ny * overlap * inv_mass2 / inv_mass_sum);
+
+                    
+                    const double relative_vx = body1.velocity.x - body2.velocity.x;
+                    const double relative_vy = body1.velocity.y - body2.velocity.y;
+                    const double velocity_along_normal = relative_vx * nx + relative_vy * ny;
+
+                    
+                    if (velocity_along_normal < 0.0) {
+                        const double restitution = 0.8; // 1 = perfectly elastic
+                        const double impulse =
+                            -(1.0 + restitution) * velocity_along_normal / inv_mass_sum;
+
+                        body1.velocity.x += static_cast<float>(impulse * inv_mass1 * nx);
+                        body1.velocity.y += static_cast<float>(impulse * inv_mass1 * ny);
+                        body2.velocity.x -= static_cast<float>(impulse * inv_mass2 * nx);
+                        body2.velocity.y -= static_cast<float>(impulse * inv_mass2 * ny);
+                    }
+           }
+           // Either planet or star collision
+            }
+        }
+    }
+    if(temp_storage.size() > 0)bodies.push_back(temp_storage[0]);
+    bodies.erase(std::remove_if(bodies.begin(), bodies.end(), [](const Body& b) { return !b.active; }),bodies.end());
+
+}
+
 
 int main(){
     InitWindow(window_width, window_height, "N-Body Simulation - Verlet Integration");
@@ -257,6 +341,8 @@ int main(){
             body.UpdTrail();
         }
         }
+
+        CheckCollision(bodies);
 
         std::vector<Vector2> new_accelerations(bodies.size());
         for(size_t i = 0; i < bodies.size(); ++i){
